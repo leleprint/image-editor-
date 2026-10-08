@@ -1,5 +1,7 @@
 # House rules (print shop)
 
+- Rispondi sempre al cliente in **italiano**.
+
 ## Production
 - Logos with only a few flat colours are produced with **vinyl cutting (HTV)** on a plotter using
   **Siser EasyWeed** (90 micron PU film, sticky carrier); every cut is weeded by hand.
