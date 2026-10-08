@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imgedit"
+version = "0.1.0"
+description = "Plan-first, scope-locked image editor driven by natural language"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "pillow>=10.1"]
+
+[project.optional-dependencies]
+llm = ["anthropic>=1.0"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+imgedit = "imgedit.cli:main"
+
+[tool.setuptools]
+packages = ["imgedit"]
