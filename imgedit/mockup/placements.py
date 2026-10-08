@@ -104,14 +104,15 @@ def placement_text() -> str:
 
 
 # Minimum printable line / gap (mm) by production method. Sources:
-#   vinyl  https://www.stahls.com/heat-transfer-vinyl-easyweed (1.5mm lines),
+#   vinyl  Siser EasyWeed (90 micron PU, sticky carrier) - the shop's material. Siser publishes no minimum;
+#          distributor Stahls recommends 1.5mm lines https://www.stahls.com/heat-transfer-vinyl-easyweed;
 #          https://help.printify.com/hc/en-us/articles/43890557264529 (metallic/glitter 1.8mm lines, 1.5mm gaps)
 #   dtf    https://t-shirt.ca/dtf-knowledge-hub/dtf-artwork-requirements-and-file-formats/ (0.5mm)
 #   screen https://transferexpress.com/videos/line-thickness-tool-and-print-minimums (~0.3mm);
 #          https://www.fmexpressions.com/blogs/free-design-resources/fine-details-full-color-screenprinting
 #          (white on dark under ~1.06mm / 3pt gets no underbase -> not opaque)
 PRODUCTION_MIN_MM = {
-    "vinyl (HTV, weeded by hand)": (1.5, 1.5),
+    "vinyl (Siser EasyWeed, hand-weeded)": (1.5, 1.5),  # lower only after the shop's own test cut
     "DTF": (0.5, 0.5),
     "screen print": (0.3, 0.3),
 }
