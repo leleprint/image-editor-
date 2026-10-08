@@ -14,6 +14,11 @@
   A **bold variant** (`dance-studio-logo-bold.svg`: line x3.2, ring x2.4 inward, same shapes/colours/centring)
   is used **only for mockups**. Bold logo is vinyl-ready from ~225 mm wide (white line governs);
   below that use DTF.
+- Text lockup (as printed on the club t-shirts): "DANCE STUDIO / BOVOLONE", two centred lines LEFT of the
+  circle, colour = ring pink #EDCFD1 (same vinyl). Font on the shirt is unconfirmed; closest free match is
+  URW Gothic Demi (Avant Garde clone). Proportions in circle diameters D: line 1 width 2.50 D, cap 0.263 D,
+  baseline pitch 1.21 x cap, gap to circle 0.072 D, text block centre 0.07 D above circle centre.
+  Files: dance-studio-logo-text.svg (master) / dance-studio-logo-bold-text.svg (mockups only).
 
 ## Mockups
 - Default placements follow `imgedit/mockup/placements.py`; always state assumptions (garment size, bag size).
