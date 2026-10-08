@@ -64,27 +64,23 @@ def _cache_dir() -> str:
     return d
 
 
-def _cache_key(image_bytes: bytes, prompt: str, model: str, effort: str, facts: str) -> str:
-    h = hashlib.sha256()
-    for part in (image_bytes, prompt.strip().encode(), model.encode(), effort.encode(), facts.encode(),
-                 hashlib.sha256(SYSTEM_PROMPT.encode()).digest()):
-        h.update(part)
-        h.update(b"\0")
-    return h.hexdigest()[:32]
-
-
-def plan_with_model(
-    preview: bytes,
-    facts: str,
-    prompt: str,
+def structured_call(
+    system: str,
+    schema: dict,
+    content: list[dict],
+    key_parts: list[bytes],
     *,
     model: str = DEFAULT_MODEL,
     effort: str = "medium",
     use_cache: bool = True,
     client=None,
 ) -> tuple[dict, Usage]:
-    key = _cache_key(preview, prompt, model, effort, facts)
-    path = os.path.join(_cache_dir(), f"{key}.json") if use_cache else None
+    """One schema-constrained call with a cached system prompt, refusal fallback and an on-disk plan cache."""
+    h = hashlib.sha256()
+    for part in [*key_parts, model.encode(), effort.encode(), hashlib.sha256(system.encode()).digest()]:
+        h.update(part)
+        h.update(b"\0")
+    path = os.path.join(_cache_dir(), f"{h.hexdigest()[:32]}.json") if use_cache else None
     if path and os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             return json.load(f), Usage(cached_plan=True)
@@ -101,16 +97,9 @@ def plan_with_model(
             max_tokens=16000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-            output_config={"effort": effort, "format": {"type": "json_schema", "schema": PLAN_SCHEMA}},
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                 "data": base64.standard_b64encode(preview).decode()}},
-                    {"type": "text", "text": f"Full-resolution image: {facts}\nRequest: {prompt.strip()}"},
-                ],
-            }],
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+            messages=[{"role": "user", "content": content}],
         )
     except anthropic.AuthenticationError as e:
         raise PlannerError("Anthropic credentials missing or invalid (set ANTHROPIC_API_KEY or run `ant auth login`)") from e
@@ -146,3 +135,23 @@ def plan_with_model(
             json.dump(raw, f)
     return raw, usage
 
+
+def image_block(data: bytes, media_type: str) -> dict:
+    return {"type": "image", "source": {"type": "base64", "media_type": media_type,
+                                        "data": base64.standard_b64encode(data).decode()}}
+
+
+def plan_with_model(
+    preview: bytes,
+    facts: str,
+    prompt: str,
+    *,
+    model: str = DEFAULT_MODEL,
+    effort: str = "medium",
+    use_cache: bool = True,
+    client=None,
+) -> tuple[dict, Usage]:
+    content = [image_block(preview, "image/jpeg"),
+               {"type": "text", "text": f"Full-resolution image: {facts}\nRequest: {prompt.strip()}"}]
+    return structured_call(SYSTEM_PROMPT, PLAN_SCHEMA, content, [preview, prompt.strip().encode(), facts.encode()],
+                           model=model, effort=effort, use_cache=use_cache, client=client)

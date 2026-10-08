@@ -78,6 +78,46 @@ The model is called at most once per request. Nothing about the image is sent ba
 - transparency flattened when saving to JPEG
 - high-bit-depth or CMYK sources being converted
 
+## Mockups
+
+```
+imgedit mockup tee.jpg logo.svg "left chest print" --guide
+imgedit mockup mug.jpg logo.svg "centred on the mug, 75mm wide" --save-plan mug.json
+imgedit mockup-apply mug2.jpg logo.svg mug.json --yes        # re-render, 0 tokens
+```
+
+It follows the same rules as editing: a plan comes first, along with its limits and the artifacts it measured. Nothing is written until you confirm. Every pixel outside the logo's footprint stays byte-identical to the product photo, and this is verified.
+
+1. **Plan.** One model call (`--effort high` by default, since the geometry is the hard part) looks at the product photo and the logo. It returns:
+   - the product's surface model:
+     - `fabric` for garments, totes and caps
+     - `flat` for boxes, cards and signs
+     - `cylinder` for mugs, bottles, cans and pens (tapered or tilted ones too)
+   - the print region, chosen from industry placement standards (`imgedit/mockup/placements.py`, with sources), such as left chest 3.5–4in or mug 60–90mm, 25mm from the handle
+   - a physical size in mm, plus a reference measured on the photo (chest width, mug diameter, box edge)
+   - ink, technique, finish and any occluders in front of the print
+2. **Make the geometry precise.**
+   - Box faces: each whole face edge is located and a line is fitted to it; the corners are where those lines intersect, to sub-pixel accuracy.
+   - Cylinders: the silhouette edges are found at sub-pixel accuracy, and the axis and radius are refitted from them.
+   - Size: the print box is rescaled until the logo's width *along the surface* (arc length on cylinders) matches the target in mm.
+   - `--guide` writes an overlay of the fitted surface and print box so you can check it.
+3. **Composite physically.**
+   - Ink replaces the product's albedo under the photo's own lighting, so shadows, folds, falloff and the colour of the light all carry onto the logo.
+   - Fabric prints bend along the folds, and the weave shows through.
+   - Gloss is added on top of the ink as reflected light.
+   - Ink opacity depends on the material.
+   - Lens softness and sensor grain are measured from the photo and matched.
+   - Techniques: `print`, `engrave` (wood, metal, glass), `emboss`/`deboss`. Inks: original, white background knocked out, or a single colour.
+4. **Report.** The report covers:
+   - the size achieved against the target
+   - how far the refinement moved the geometry
+   - logo pixels that blend into the product colour (ΔE < 12)
+   - raster logos that had to be upscaled
+   - strong foreshortening on cylinders
+   - parts of the logo hidden off the visible surface
+
+Limits that the report always states: a composite isn't a photo of a real print. Embroidery, foil, glitter and puff print aren't simulated. Screen colours don't match print colours. Nothing already in the photo is removed.
+
 ## Development
 
 ```

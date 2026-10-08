@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Plan-first, scope-locked image editor driven by natural language"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.24", "pillow>=10.1"]
+dependencies = ["numpy>=1.24", "pillow>=10.1", "opencv-python-headless>=4.8", "resvg-py>=0.2"]
 
 [project.optional-dependencies]
 llm = ["anthropic>=1.0"]
@@ -18,4 +18,4 @@ dev = ["pytest>=7"]
 imgedit = "imgedit.cli:main"
 
 [tool.setuptools]
-packages = ["imgedit"]
+packages = ["imgedit", "imgedit.mockup"]
