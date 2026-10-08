@@ -26,12 +26,24 @@ class Logo:
         return self.rgba.shape[1] / self.rgba.shape[0]
 
 
+def _svg_aspect(svg: str) -> float:
+    """width / height from the viewBox (1.0 if unknown)."""
+    import re
+    m = re.search(r'viewBox="\s*[-\d.eE]+[\s,]+[-\d.eE]+[\s,]+([\d.eE]+)[\s,]+([\d.eE]+)', svg)
+    return float(m.group(1)) / float(m.group(2)) if m else 1.0
+
+
+def _render_kw(svg: str, long_side: int) -> dict:
+    """resvg size argument so the LONG side is long_side (tall artwork must not explode in height)."""
+    return {"width": int(long_side)} if _svg_aspect(svg) >= 1 else {"height": int(long_side)}
+
+
 def _render_svg(path: str, width: int) -> np.ndarray:
     try:
         import resvg_py
     except ImportError as e:  # pragma: no cover
         raise RuntimeError("SVG logos need `pip install resvg-py` (or supply a PNG)") from e
-    png = bytes(resvg_py.svg_to_bytes(svg_path=path, width=int(width)))
+    png = bytes(resvg_py.svg_to_bytes(svg_path=path, **_render_kw(open(path, encoding="utf-8").read(), width)))
     return np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"), np.float32) / 255.0
 
 
@@ -163,7 +175,7 @@ def _svg_layers(svg: str, width_px: int) -> list[tuple[str, np.ndarray]]:
         for j, u in reversed(list(enumerate(tags))):
             if j != i:
                 doc = doc[:u.start()] + u.group(0).replace("<path", '<path display="none"', 1) + doc[u.end():]
-        png = bytes(resvg_py.svg_to_bytes(svg_string=doc, width=width_px))
+        png = bytes(resvg_py.svg_to_bytes(svg_string=doc, **_render_kw(svg, width_px)))
         a = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))
         m = a[..., 3] > 127
         if m.sum() < 20:
@@ -187,7 +199,7 @@ def stroke_stats(logo: Logo, work_px: int = 1200) -> list[dict]:
         # widths relative to the TRIMMED logo (what the placement's mm refers to)
         alls = np.any([m for _, m in layers], axis=0)
         xs = np.nonzero(alls.any(0))[0]
-        width_px = int(xs.max() - xs.min() + 1)
+        width_px = int(xs.max() - xs.min() + 1)  # measurements stay relative to the artwork WIDTH
     else:
         a = logo.rgba
         f = work_px / a.shape[1]
