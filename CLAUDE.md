@@ -28,3 +28,16 @@
 ## Mockups
 - Default placements follow `imgedit/mockup/placements.py`; always state assumptions (garment size, bag size).
 - Always keep pixels outside the logo identical to the product photo (verified by the engine).
+
+## Final delivery (ALWAYS, at the end of every job)
+When a job is finished, without being asked, build ONE folder named after the client
+(e.g. "Dance Studio Bovolone") with Italian names, zip it as "<Cliente>.zip" and send it:
+  LEGGIMI.txt                 in Italian: what each file is, colours (hex), production notes
+                              (vinyl EasyWeed OK / DTF needed, minimum sizes)
+  01_Logo/                    official master logo(s): SVG + transparent PNG
+  02_Logo_per_mockup/         bold/mockup-only variants (if any)
+  03_File_taglio_plotter/     cut-ready SVGs, text converted to outlines, script fonts welded
+  04_Mockup/                  final approved mockups only (drop rejected/removed ones)
+  05_Font/                    every font file used + its licence file
+File names: Italian, lowercase, hyphens (e.g. logo-cerchio.svg, maglietta-fronte.png).
+Rebuild the zip after any later change so it always matches the latest approved versions.
