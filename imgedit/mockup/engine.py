@@ -159,6 +159,20 @@ def analyse(photo_u8: np.ndarray, logo: Logo, plan: MockupPlan, res: MockupResul
             if low > 0.05:
                 measured.append(f"{tag}: {low:.0%} of the logo is nearly the same colour as the product (ΔE<12) "
                                 "and will be barely visible")
+        if spec.size:
+            from .logo import stroke_stats
+            from .placements import PRODUCTION_MIN_MM
+            mm = spec.size["logo_width_mm"]
+            layers = stroke_stats(lg)
+            line_mm = min(L["line"] for L in layers) * mm
+            gaps = [L["gap"] for L in layers if L["gap"] is not None]
+            gap_mm = min(gaps) * mm if gaps else None
+            verdict = ", ".join(
+                f"{name}: {'OK' if line_mm >= ml and (gap_mm is None or gap_mm >= mg) else 'TOO THIN'}"
+                for name, (ml, mg) in PRODUCTION_MIN_MM.items())
+            detail = "; ".join(f"{L['colour']} line {L['line'] * mm:.2f}mm"
+                               + (f", gap {L['gap'] * mm:.2f}mm" if L["gap"] is not None else "") for L in layers)
+            measured.append(f"{tag}: {len(layers)} ink colour(s) at {mm:.0f}mm wide [{detail}] -> {verdict}")
         lo, hi = st.get("shade_range", [1, 1])
         if lo < 0.45:
             possible.append(f"{tag}: deep shadows/folds cross the logo (shading down to {lo:.0%}); parts will look dark - this is how the real print would look")

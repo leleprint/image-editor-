@@ -269,3 +269,16 @@ def test_dark_product_gets_no_dye_tint():
     c = composite(photo, logo, Flat(q), Placement(), Look(blur=0, grain=0, opacity=1.0))
     px = c.rgb[60, 60].astype(int)
     assert px.max() - px.min() <= 3  # white ink stays neutral white
+
+
+def test_stroke_stats_per_layer():
+    a = np.zeros((400, 400, 4), np.float32)
+    a[50:350, 100:108, :3] = 1          # white bar 8px = 0.02 of width
+    a[50:350, 100:108, 3] = 1
+    a[50:350, 200:260, :3] = (1, 0, 0)  # red block with a 10px hole
+    a[50:350, 200:260, 3] = 1
+    a[150:250, 225:235, 3] = 0
+    layers = {L["colour"]: L for L in __import__("imgedit.mockup.logo", fromlist=["x"]).stroke_stats(
+        Logo("x.png", a, False), work_px=400)}
+    assert abs(layers["#ffffff"]["line"] * 400 - 8) <= 1.5 and layers["#ffffff"]["gap"] is None
+    assert abs(layers["#ff0000"]["gap"] * 400 - 10) <= 2

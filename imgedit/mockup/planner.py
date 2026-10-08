@@ -26,6 +26,8 @@ Size: give "size" with a reference measured on the photo at the same depth as th
 Look per material (adjust if the photo clearly differs): cotton/knit tee: opacity 0.93, texture 0.6, gloss 0; polyester/sport: 0.95, 0.4, 0.1; canvas tote: 0.92, 0.7, 0; cap: 0.95, 0.5, 0; glazed ceramic: 0.98, 0, 0.8; matte ceramic: 0.98, 0.1, 0.2; metal/steel bottle: 0.97, 0, 0.6; glass: 0.85, 0, 0.7; paper/card: 0.98, 0.3, 0 (gloss 0.5 if laminated). technique: "print" (default), "engrave" (laser/etch: ink_color = engraved tone, e.g. wood #3a2a1e, anodised metal #d9d9d9, glass frost #eef3f4 with opacity 0.6), "emboss"/"deboss" (blind relief on leather/paper/card, no ink).
 ink: "original" keeps the logo colours; "knockout_white" removes an opaque white logo background (use when the logo has one and it would print as a white rectangle, and say so in ambiguities); "single_color" prints the shape in ink_color (one-colour screen print, or when asked). ink_color "" when unused.
 
+House production rule: logos with few flat colours are made in cut vinyl (HTV), weeded by hand: lines/gaps must be >= 1.5mm at print size. For vinyl use look opacity 1.0, texture 0.2, gloss 0.15 (pressed vinyl: opaque, slight sheen, faint fabric texture). If the requested size makes the logo too thin for vinyl, keep the size but say so in "risks" with the minimum workable width.
+
 Occluders: polygons (normalized) of anything IN FRONT of the print area (hair, straps, hands, mug handle, drawstrings, folds lapping over). Empty if none.
 
 "preserved": what stays untouched. "risks": issues specific to THIS photo (e.g. "strong side light: right half of logo will be darker", "low contrast: white logo on white shirt", "logo partly crosses the side seam"). No generic filler. Terse text everywhere.
