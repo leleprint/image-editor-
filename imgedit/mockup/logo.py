@@ -19,6 +19,7 @@ class Logo:
     rgba: np.ndarray  # float32 straight alpha, sRGB 0..1
     vector: bool
     notes: list[str] = field(default_factory=list)
+    svg: str = ""  # source markup for vector logos (used for exact per-layer analysis)
 
     @property
     def aspect(self) -> float:
@@ -38,7 +39,7 @@ def load_logo(path: str, target_width: int = 2400) -> Logo:
     """Vectors are rasterised large enough that the final warp only ever downsamples."""
     if path.lower().endswith((".svg", ".svgz")):
         rgba = _render_svg(path, target_width)
-        logo = Logo(path, rgba, True)
+        logo = Logo(path, rgba, True, svg=open(path, encoding="utf-8").read())
     else:
         im = Image.open(path)
         im.load()
@@ -107,45 +108,92 @@ def describe(logo: Logo) -> str:
             f"aspect {logo.aspect:.2f}, coverage {vis.mean():.0%}, main colours {', '.join(hexes)}")
 
 
-def _ink_layers(rgba: np.ndarray, min_share: float = 0.02) -> list[tuple[str, np.ndarray]]:
-    """Split artwork into its flat colours (each is one vinyl sheet / one screen)."""
+def _ink_layers(rgba: np.ndarray, min_share: float = 0.002) -> list[tuple[str, np.ndarray]]:
+    """Split artwork into its flat colours (each is one vinyl sheet / one screen).
+
+    Colours are taken only from solid interior pixels (opaque, 3x3 neighbourhood of the same colour),
+    so anti-aliased edges between two inks never count as a separate ink.
+    """
     vis = rgba[..., 3] > 0.5
-    q = np.round(rgba[..., :3] * 8).astype(int)
+    q = np.clip(np.round(rgba[..., :3] * 8), 0, 8).astype(np.int32)
     key = q[..., 0] * 100 + q[..., 1] * 10 + q[..., 2]
-    vals, cnt = np.unique(key[vis], return_counts=True)
+    solid = rgba[..., 3] > 0.95
+    k = key.astype(np.float32)
+    same = (cv2.erode(k, np.ones((3, 3), np.uint8)) == k) & (cv2.dilate(k, np.ones((3, 3), np.uint8)) == k)
+    core = solid & same
+    vals, cnt = np.unique(key[core], return_counts=True)
     layers = []
     for v, c in sorted(zip(vals, cnt), key=lambda t: -t[1]):
-        if c < min_share * vis.sum():
+        if c < min_share * max(1, core.sum()):
             continue
+        # the layer's full footprint: its own pixels plus edge pixels closest to it
         m = vis & (key == v)
+        m = m | (cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & vis & ~core)
         r, g, b = (v // 100) / 8, (v // 10 % 10) / 8, (v % 10) / 8
         layers.append(("#%02x%02x%02x" % (int(min(1, r) * 255), int(min(1, g) * 255), int(min(1, b) * 255)), m))
-    # merge layers that are visually the same ink (e.g. two near-identical pinks would be separate sheets anyway)
     return layers
 
 
-def stroke_stats(logo: Logo, work_px: int = 1200) -> list[dict]:
-    """Per colour layer: thinnest line and narrowest enclosed gap, as fractions of the logo width.
+def _measure(m: np.ndarray, width_px: int) -> tuple[float, float | None]:
+    m8 = m.astype(np.uint8)
+    d = cv2.distanceTransform(m8, cv2.DIST_L2, 5)
+    ridge = (d > 1.0) & (d >= cv2.dilate(d, np.ones((3, 3), np.uint8)) - 1e-6)
+    line = float(np.percentile(d[ridge] * 2, 5)) / width_px if ridge.any() else 0.0
+    filled = m8.copy()
+    cv2.floodFill(filled, np.zeros((m8.shape[0] + 2, m8.shape[1] + 2), np.uint8), (0, 0), 2)
+    holes = (filled == 0).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(holes, 4)
+    dh = cv2.distanceTransform(holes, cv2.DIST_L2, 5)
+    widths = [2 * float(dh[lab == k].max()) for k in range(1, n) if st[k, cv2.CC_STAT_AREA] >= 6]
+    return line, (min(widths) / width_px if widths else None)
 
-    Line = 5th percentile of the medial-axis width (ignores tapered tips). Gap = smallest maximum
-    inscribed width among enclosed holes of that layer (each hole is a piece someone has to weed).
-    """
-    a = logo.rgba
-    f = work_px / a.shape[1]
-    a = cv2.resize(a, (work_px, max(2, int(round(a.shape[0] * f)))), interpolation=cv2.INTER_AREA)
+
+def _svg_layers(svg: str, width_px: int) -> list[tuple[str, np.ndarray]]:
+    """Render each <path> alone (others display:none) - exactly what each vinyl sheet / screen gets."""
+    import re
+
+    import resvg_py
+    tags = list(re.finditer(r"<path\b[^>]*>", svg))
     out = []
-    for colour, m in _ink_layers(a):
-        m8 = m.astype(np.uint8)
-        d = cv2.distanceTransform(m8, cv2.DIST_L2, 5)
-        ridge = (d > 1.0) & (d >= cv2.dilate(d, np.ones((3, 3), np.uint8)) - 1e-6)
-        line = float(np.percentile(d[ridge] * 2, 5)) / work_px if ridge.any() else 0.0
-        filled = m8.copy()
-        cv2.floodFill(filled, np.zeros((m8.shape[0] + 2, m8.shape[1] + 2), np.uint8), (0, 0), 2)
-        holes = (filled == 0).astype(np.uint8)
-        n, lab, st, _ = cv2.connectedComponentsWithStats(holes, 4)
-        dh = cv2.distanceTransform(holes, cv2.DIST_L2, 5)
-        widths = [2 * float(dh[lab == k].max()) for k in range(1, n) if st[k, cv2.CC_STAT_AREA] >= 6]
-        gap = min(widths) / work_px if widths else None
-        out.append({"colour": colour, "share": float(m.mean() / max(1e-9, (a[..., 3] > 0.5).mean())),
-                    "line": line, "gap": gap})
+    for i, t in enumerate(tags):
+        doc = svg
+        for j, u in reversed(list(enumerate(tags))):
+            if j != i:
+                doc = doc[:u.start()] + u.group(0).replace("<path", '<path display="none"', 1) + doc[u.end():]
+        png = bytes(resvg_py.svg_to_bytes(svg_string=doc, width=width_px))
+        a = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))
+        m = a[..., 3] > 127
+        if m.sum() < 20:
+            continue
+        pid = re.search(r'id="([^"]+)"', t.group(0))
+        col = re.search(r'fill="([^"]+)"', t.group(0))
+        out.append(((pid.group(1) if pid else f"path{i}") + (f" {col.group(1)}" if col else ""), m))
+    return out
+
+
+def stroke_stats(logo: Logo, work_px: int = 1200) -> list[dict]:
+    """Per ink layer: thinnest line and narrowest enclosed gap, as fractions of the logo width.
+
+    Vector logos: each path is rendered on its own (exact; overlapping layers don't fake holes).
+    Raster logos: layers are inferred from flat colours. Line = 5th percentile of the medial-axis
+    width (ignores tapered tips); gap = smallest inscribed width among a layer's enclosed holes.
+    """
+    if logo.svg:
+        work = 6000
+        layers = _svg_layers(logo.svg, work)
+        # widths relative to the TRIMMED logo (what the placement's mm refers to)
+        alls = np.any([m for _, m in layers], axis=0)
+        xs = np.nonzero(alls.any(0))[0]
+        width_px = int(xs.max() - xs.min() + 1)
+    else:
+        a = logo.rgba
+        f = work_px / a.shape[1]
+        a = cv2.resize(a, (work_px, max(2, int(round(a.shape[0] * f)))), interpolation=cv2.INTER_AREA)
+        layers = _ink_layers(a)
+        width_px = work_px
+    out = []
+    total = max(1, int(np.sum([m.sum() for _, m in layers])))
+    for name, m in layers:
+        line, gap = _measure(m, width_px)
+        out.append({"colour": name, "share": float(m.sum() / total), "line": line, "gap": gap})
     return out

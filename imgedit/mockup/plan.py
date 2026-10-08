@@ -187,7 +187,8 @@ def validate_mockup(raw: dict, size: tuple[int, int]) -> MockupPlan:
             if tech not in TECHNIQUES:
                 raise ValueError(f"unknown technique {tech!r}")
             look = Look(technique=tech, opacity=_c01(lk.get("opacity", 0.97), 0.3, 1.0), gloss=_c01(lk.get("gloss", 0)),
-                        texture=_c01(lk.get("texture", 0)))
+                        texture=_c01(lk.get("texture", 0)),
+                        blur=(None if lk.get("blur") is None else _c01(lk["blur"], 0, 5)))
             ink = lk.get("ink", "original")
             if ink not in INKS:
                 raise ValueError(f"unknown ink mode {ink!r}")

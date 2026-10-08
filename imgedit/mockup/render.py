@@ -83,32 +83,56 @@ def _sharpness(a: np.ndarray, mask: np.ndarray) -> float:
 
 
 def estimate_softness(photo_lum: np.ndarray, roi, alpha: np.ndarray) -> float:
-    """Gaussian sigma (px) that makes crisp logo edges as soft as real edges near the print.
+    """Extra Gaussian sigma (px) so the print is exactly as soft as the photo's own sharp edges.
 
-    Only edges INSIDE the product count: in cut-out product shots the silhouette against the white
-    background is feathered by the background removal, not by the lens.
+    Measures the 10-90% rise distance across the strongest edges INSIDE the product near the print
+    (cut-out silhouettes against the white backdrop are feathered by background removal, not the lens).
+    For a Gaussian blur, rise = 2.56 sigma. The renderer's own anti-aliasing (~0.5px) is subtracted.
     """
     x0, y0, x1, y1 = roi
     h, w = photo_lum.shape
-    pad = max(20, int(0.5 * max(x1 - x0, y1 - y0)))
+    pad = max(30, int(0.8 * max(x1 - x0, y1 - y0)))
     X0, Y0, X1, Y1 = max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad)
-    crop = photo_lum[Y0:Y1, X0:X1]
-    backdrop = crop > 0.9
+    crop = photo_lum[Y0:Y1, X0:X1].astype(np.float32)
+    # backdrop = bright area connected to the IMAGE border (a white label inside the product is not backdrop)
+    bright = (photo_lum > 0.9).astype(np.uint8)
+    n, lab, _, _ = cv2.connectedComponentsWithStats(bright, 4)
+    border = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    backdrop_full = np.isin(lab, border[border > 0])
+    backdrop = backdrop_full[Y0:Y1, X0:X1]
     interior = ~(cv2.dilate(backdrop.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0)
-    if interior.sum() < 200:
-        return 0.5
-    target = _sharpness(crop, interior)
-    edge = alpha > 0.02
-    if edge.sum() < 30:
-        return 0.5
-    best, best_err = 0.0, 1e9
-    for sig in (0.0, 0.3, 0.5, 0.7, 0.9, 1.2, 1.6, 2.0, 2.6):
-        a = cv2.GaussianBlur(alpha, (0, 0), sig) if sig > 0 else alpha
-        sh = _sharpness(a, cv2.dilate(edge.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0)
-        err = abs(sh - target)
-        if err < best_err:
-            best, best_err = sig, err
-    return best
+    gx = cv2.Sobel(crop, cv2.CV_32F, 1, 0, ksize=3) / 8
+    gy = cv2.Sobel(crop, cv2.CV_32F, 0, 1, ksize=3) / 8
+    g = np.hypot(gx, gy)
+    sel = interior & (g > max(0.02, np.percentile(g[interior], 99))) if interior.sum() > 200 else None
+    if sel is None or sel.sum() < 10:
+        return 0.3
+    ys, xs = np.nonzero(sel)
+    idx = np.argsort(-g[ys, xs])[:200]
+    rises = []
+    t = np.arange(-5, 5.01, 0.25, dtype=np.float32)
+    for yy, xx in zip(ys[idx], xs[idx]):
+        nx, ny = gx[yy, xx] / g[yy, xx], gy[yy, xx] / g[yy, xx]
+        px = (xx + t * nx).astype(np.float32).reshape(-1, 1)
+        py = (yy + t * ny).astype(np.float32).reshape(-1, 1)
+        prof = cv2.remap(crop, px, py, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE).ravel()
+        lo, hi = prof[:4].mean(), prof[-4:].mean()
+        # only genuine step edges: strong contrast, flat on both sides (fabric shading is neither)
+        if hi - lo < 0.05 or prof[:4].std() > 0.25 * (hi - lo) or prof[-4:].std() > 0.25 * (hi - lo):
+            continue
+        n = (prof - lo) / (hi - lo)
+        try:
+            a10 = t[np.nonzero(n >= 0.1)[0][0]]
+            a90 = t[np.nonzero(n >= 0.9)[0][0]]
+        except IndexError:
+            continue
+        if a90 > a10:
+            rises.append(a90 - a10)
+    if len(rises) < 5:
+        return 0.3
+    # the camera bounds how SHARP an edge can be, not how soft (fabric shading is softer): use the sharpest
+    sigma_photo = float(np.percentile(rises, 10)) / 2.56
+    return float(np.sqrt(max(0.0, sigma_photo ** 2 - 0.5 ** 2)))
 
 
 def estimate_noise(photo: np.ndarray, roi) -> float:
