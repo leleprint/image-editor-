@@ -48,10 +48,20 @@ def _lum(a: np.ndarray) -> np.ndarray:
 
 
 def sample_logo(logo: np.ndarray, m: Mapping) -> np.ndarray:
-    """Premultiplied RGBA logo sampled through the inverse map, box-filtered to output resolution."""
-    lh, lw = logo.shape[:2]
+    """Premultiplied LINEAR-light RGBA logo sampled through the inverse map, box-filtered to output size.
+
+    Filtering in linear light matters for thin bright strokes on dark products: a white line that
+    covers 25% of a pixel must average to 25% of the light (sRGB ~137), not to sRGB 64.
+    """
     prem = logo.copy()
-    prem[..., :3] *= prem[..., 3:4]
+    prem[..., :3] = to_linear(np.clip(prem[..., :3], 0, 1)) * prem[..., 3:4]
+    # Pre-filter (mip-map): a 2400px logo sampled straight into a 35px footprint aliases - thin strokes
+    # fall between samples and break up. Area-average it down to ~2x the supersampled footprint first.
+    target_w = max(8, int(m.footprint_px[0] * m.ss * 2))
+    if prem.shape[1] > target_w * 1.5:
+        f = target_w / prem.shape[1]
+        prem = cv2.resize(prem, (target_w, max(2, int(round(prem.shape[0] * f)))), interpolation=cv2.INTER_AREA)
+    lh, lw = prem.shape[:2]
     mx = m.lu * (lw - 1)
     my = m.lv * (lh - 1)
     s = cv2.remap(prem, mx, my, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
@@ -73,12 +83,21 @@ def _sharpness(a: np.ndarray, mask: np.ndarray) -> float:
 
 
 def estimate_softness(photo_lum: np.ndarray, roi, alpha: np.ndarray) -> float:
-    """Gaussian sigma (px) that makes crisp logo edges as soft as real edges near the print."""
+    """Gaussian sigma (px) that makes crisp logo edges as soft as real edges near the print.
+
+    Only edges INSIDE the product count: in cut-out product shots the silhouette against the white
+    background is feathered by the background removal, not by the lens.
+    """
     x0, y0, x1, y1 = roi
     h, w = photo_lum.shape
     pad = max(20, int(0.5 * max(x1 - x0, y1 - y0)))
     X0, Y0, X1, Y1 = max(0, x0 - pad), max(0, y0 - pad), min(w, x1 + pad), min(h, y1 + pad)
-    target = _sharpness(photo_lum[Y0:Y1, X0:X1], np.ones((Y1 - Y0, X1 - X0), bool))
+    crop = photo_lum[Y0:Y1, X0:X1]
+    backdrop = crop > 0.9
+    interior = ~(cv2.dilate(backdrop.astype(np.uint8), np.ones((9, 9), np.uint8)) > 0)
+    if interior.sum() < 200:
+        return 0.5
+    target = _sharpness(crop, interior)
     edge = alpha > 0.02
     if edge.sum() < 30:
         return 0.5
@@ -124,15 +143,15 @@ def composite(photo: np.ndarray, logo: np.ndarray, surface, pl: Placement, look:
         raise ValueError("logo placement falls outside the photo")
     s = sample_logo(logo, m)
     alpha = np.clip(s[..., 3], 0, 1)
-    ink = np.where(alpha[..., None] > 1e-4, s[..., :3] / np.maximum(alpha[..., None], 1e-4), 0)
+    ink_l = np.where(alpha[..., None] > 1e-4, s[..., :3] / np.maximum(alpha[..., None], 1e-4), 0)  # linear
     if occluder is not None:
         alpha = alpha * (1 - occluder[y0:y1, x0:x1])
 
     blur = look.blur if look.blur is not None else estimate_softness(plum, m.roi, alpha)
     if blur > 0:
         a2 = cv2.GaussianBlur(alpha, (0, 0), blur)
-        prem = cv2.GaussianBlur(ink * alpha[..., None], (0, 0), blur)
-        ink = np.where(a2[..., None] > 1e-4, prem / np.maximum(a2[..., None], 1e-4), 0)
+        prem = cv2.GaussianBlur(ink_l * alpha[..., None], (0, 0), blur)
+        ink_l = np.where(a2[..., None] > 1e-4, prem / np.maximum(a2[..., None], 1e-4), 0)
         alpha = a2
 
     P = photo[y0:y1, x0:x1].astype(np.float32)
@@ -144,27 +163,33 @@ def composite(photo: np.ndarray, logo: np.ndarray, surface, pl: Placement, look:
     sel = ring if ring.sum() > 50 else np.ones_like(ring)
     # "Full light" reference = the bright end of the bare surface (90th pct luminance), not the median:
     # a median is pulled down by the shaded side of curved products and would over-brighten the ink.
+    # On dark products the photo's luminance is dominated by sensor/JPEG noise and fabric sheen, not by
+    # illumination, so shading is taken at a coarser scale and its strength is reduced (confidence k).
     smooth = cv2.GaussianBlur(Pl, (0, 0), 1.2)
     lum_s = _lum(smooth)
     ref_l = max(float(np.percentile(lum_s[sel], 90)), 1e-4)
     base = np.median(Pl[sel & (lum_s >= np.percentile(lum_s[sel], 75))], 0) + 1e-4
-    shade_l = np.clip(lum_s / ref_l, 0.03, 1.15)[..., None]
+    k_conf = float(np.clip(np.sqrt(ref_l / 0.04), 0.35, 1.0))
+    sig_sh = 1.2 if k_conf >= 1.0 else max(1.2, m.footprint_px[0] / 50)
+    lum_sh = _lum(cv2.GaussianBlur(Pl, (0, 0), sig_sh))
+    raw = np.clip(lum_sh / ref_l, 0.03, 1.15)
+    shade_l = np.clip(1 + (raw - 1) * k_conf, 0.03, 1.15)[..., None]
     light_tint = base / max(float(_lum(base[None])[0]), 1e-4)
     is_neutral = np.ptp(light_tint) < 0.25  # neutral product: its cast is the light's colour
-    tint = np.clip(light_tint, 0.7, 1.3) if is_neutral else np.ones(3, np.float32)
-    stats = {"blur_sigma": blur, "base_srgb": to_srgb(base).round(3).tolist()}
+    # A bright neutral product's cast is the light's colour; a dark product's cast is its dye, so no tint.
+    tint = np.clip(light_tint, 0.7, 1.3) if (is_neutral and ref_l > 0.15) else np.ones(3, np.float32)
+    stats = {"blur_sigma": blur, "base_srgb": to_srgb(base).round(3).tolist(), "shading_confidence": round(k_conf, 2)}
 
     tech = look.technique
     if tech == "engrave":
-        ink = np.broadcast_to(np.array(parse_color(look.engrave_color), np.float32), ink.shape).copy()
+        ink_l = np.broadcast_to(to_linear(np.array(parse_color(look.engrave_color), np.float32)), ink_l.shape).copy()
     if tech in ("print", "engrave"):
-        out_l = to_linear(np.clip(ink, 0, 1)) * shade_l * tint
-        out = to_srgb(out_l)
+        out_l = np.clip(ink_l, 0, 1) * shade_l * tint
         if look.texture > 0:
             hp = _lum(P) - cv2.GaussianBlur(_lum(P), (0, 0), 1.0)
-            out = out + (hp * look.texture)[..., None]
+            out_l = to_linear(np.clip(to_srgb(out_l) + (hp * look.texture)[..., None], 0, 1))
         a = alpha * look.opacity
-        res = P + (out - P) * a[..., None]
+        res = to_srgb(Pl + (out_l - Pl) * a[..., None])  # coverage blends in linear light
     else:  # emboss / deboss: no ink, only relief shading of the substrate
         d = 1.0 if tech == "emboss" else -1.0
         k = max(1.0, (m.footprint_px[0] / 400.0))
@@ -200,5 +225,5 @@ def composite(photo: np.ndarray, logo: np.ndarray, surface, pl: Placement, look:
     foot[y0:y1, x0:x1] = np.where(touched, alpha, 0)
     stats["shade_range"] = [round(float(np.percentile(shade_l[cover], 2)), 2),
                             round(float(np.percentile(shade_l[cover], 98)), 2)] if cover.any() else [1, 1]
-    stats["ink_mean_srgb"] = ink[cover].mean(0).round(3).tolist() if cover.any() else None
+    stats["ink_mean_srgb"] = to_srgb(ink_l[cover]).mean(0).round(3).tolist() if cover.any() else None
     return Composite(out, foot, m, stats)

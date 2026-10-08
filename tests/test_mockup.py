@@ -236,3 +236,36 @@ def test_cli_mockup_apply(tmp_path):
     assert main(["mockup-apply", str(prod), str(logo), str(plan), "-o", str(out), "--yes", "--guide"]) == 0
     assert out.exists() and (tmp_path / "o.guide.png").exists()
     assert main(["mockup-apply", str(prod), str(logo), str(plan), "-o", str(prod), "--yes"]) == 1
+
+
+def _ring_logo(n=1200, width_frac=0.006):
+    y, x = np.mgrid[0:n, 0:n].astype(np.float32)
+    r = np.hypot(x - n / 2, y - n / 2)
+    a = np.zeros((n, n, 4), np.float32)
+    a[..., :3] = 1
+    a[..., 3] = (np.abs(r - n * 0.45) < n * width_frac / 2).astype(np.float32)
+    return a
+
+
+def test_thin_white_line_on_black_is_continuous_and_linear_light():
+    """Regression: sub-pixel white strokes on dark products must not break up (aliasing) or go dark (sRGB blending)."""
+    photo = np.full((120, 120, 3), 0.04, np.float32)
+    q = np.array([[40, 40], [80, 40], [80, 80], [40, 80]], float)
+    c = composite(photo, _ring_logo(), Flat(q, fabric=False), Placement(), Look(blur=0, grain=0, opacity=1.0))
+    lum = c.rgb.astype(np.float32).mean(-1)
+    t = np.linspace(0, 2 * np.pi, 180, endpoint=False)
+    xs = (60 + 18 * np.cos(t)).round().astype(int)
+    ys = (60 + 18 * np.sin(t)).round().astype(int)
+    on_ring = np.array([lum[yy - 1:yy + 2, xx - 1:xx + 2].max() for xx, yy in zip(xs, ys)])
+    assert on_ring.min() > 25  # no gaps anywhere around the ring
+    # ~0.24px coverage of white over sRGB 10 must read clearly above the background (linear-light averaging)
+    assert np.median(on_ring) > 60
+
+
+def test_dark_product_gets_no_dye_tint():
+    photo = np.full((120, 120, 3), (0.06, 0.075, 0.055), np.float32)  # greenish black fabric
+    q = np.array([[30, 30], [90, 30], [90, 90], [30, 90]], float)
+    logo = np.ones((50, 50, 4), np.float32)
+    c = composite(photo, logo, Flat(q), Placement(), Look(blur=0, grain=0, opacity=1.0))
+    px = c.rgb[60, 60].astype(int)
+    assert px.max() - px.min() <= 3  # white ink stays neutral white

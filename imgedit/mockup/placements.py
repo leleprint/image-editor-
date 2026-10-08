@@ -11,6 +11,7 @@ it chose. Sources:
            https://faq.oregonscreen.com/knowledge-base/how-big-can-my-art-be-on-a-hat
   mugs     https://titanjet.co.za/11oz-white-ceramic-standard-mug/  (210x96mm art, 25mm handle margin)
            https://help.gearment.com/en-us/article/mug-products-vsa3nr
+  pants    https://members.asicentral.com/news/how-to/june-2023/decorator-s-view-navigating-graphic-placement-on-apparel/
   totes    https://madegooddesigns.com/tote-bag-design/
            https://www.bristol.ac.uk/print-services/departmental-services/merchandise/tote-bags/
 
@@ -37,6 +38,13 @@ PLACEMENTS: dict[str, dict] = {
                          horizontal="centred", note="must end above the kangaroo pocket"),
     "hoodie.left_chest": dict(width=(3 * IN, 4 * IN), top_offset=(3 * IN, 4 * IN), top_from="shoulder seam",
                               horizontal="wearer's left"),
+    "pants.left_thigh": dict(width=(3 * IN, 4 * IN), top_offset=None, top_from="crotch seam",
+                             horizontal="centred on the wearer's left leg (viewer's right in a front view)",
+                             note="ASI: bottom edge of a small graphic ~2in below the crotch seam; long prints can run down the leg front or side"),
+    "hoodie.full_back": dict(width=(10 * IN, 12 * IN), top_offset=(1 * IN, 2 * IN), top_from="bottom of the hanging hood",
+                             horizontal="centred", note="the hood covers the upper back; print starts below it"),
+    "bag.front_panel": dict(width=(100, 200), top_offset=None, top_from="free area of the front panel",
+                            horizontal="centred in the largest panel area free of pockets, zips, piping and straps"),
     "cap.front": dict(width=(3.5 * IN, 5 * IN), height_max=(2 * IN, 2.25 * IN), top_offset=(0.25 * IN, 0.5 * IN),
                       top_from="top of front panels", horizontal="centred on the front seam",
                       note="unstructured/dad caps: 3.5-4in wide, max 1.75-2in tall; logo bottom sits ~0.5in above the visor seam"),
