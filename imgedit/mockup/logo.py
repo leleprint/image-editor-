@@ -145,6 +145,9 @@ def _measure(m: np.ndarray, width_px: int) -> tuple[float, float | None]:
     n, lab, st, _ = cv2.connectedComponentsWithStats(holes, 4)
     dh = cv2.distanceTransform(holes, cv2.DIST_L2, 5)
     widths = [2 * float(dh[lab == k].max()) for k in range(1, n) if st[k, cv2.CC_STAT_AREA] >= 6]
+    # enclosed features thinner than ~1/2000 of the artwork width are raster-closed sharp corners
+    # (two outline segments almost touching), not holes - a blade cuts them as a corner
+    widths = [w for w in widths if w >= max(3.0, width_px / 2000)]
     return line, (min(widths) / width_px if widths else None)
 
 

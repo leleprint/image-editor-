@@ -20,6 +20,11 @@
   baseline pitch 1.21 x cap, gap to circle 0.072 D, text block centre 0.07 D above circle centre.
   Files: dance-studio-logo-text.svg (master) / dance-studio-logo-bold-text.svg (mockups only).
 
+- Teacher names (hoodie back): line 1 "Maestra" in Kaushan Script (closest free match to the old brush
+  script), line 2 the name in URW Gothic Demi caps, centred, ring pink; script line 0.75x the name width.
+  Script outlines are WELDED (overlapping joins merged) so the plotter cuts each word as one piece.
+  Placement: name ~283 mm wide, top ~139 mm below the hood. File: maestra-benedetta.svg.
+
 ## Mockups
 - Default placements follow `imgedit/mockup/placements.py`; always state assumptions (garment size, bag size).
 - Always keep pixels outside the logo identical to the product photo (verified by the engine).
