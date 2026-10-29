@@ -29,8 +29,9 @@
 
 - Verona Dogs (LeLePrint client): front = "Verona Dogs" yellow, heart side; back = two dogs + ladder V logo,
   unchanged. Back phrase "Educazione e sport cinofili": Righteous (OFL, closest legible match to the
-  Bauhaus-style "Verona Dogs"), logo yellow ~#F6EE13, one line centred under the V tip, width 0.80 x logo,
-  gap 0.07 x logo width (24 cm at a 30 cm logo; EasyWeed OK from ~21.5 cm wide, below that DTF).
+  Bauhaus-style "Verona Dogs"), logo yellow ~#F6EE13, TWO centred lines "Educazione e" / "sport cinofili"
+  (same size, baseline pitch 1.55 x cap) under the V tip, block width 0.70 x logo, gap 0.07 x logo width
+  (21 x 7.2 cm at a 30 cm logo; EasyWeed OK from ~10.5 cm wide, below that DTF). File: text/twoline.py.
 
 ## Mockups
 - Default placements follow `imgedit/mockup/placements.py`; always state assumptions (garment size, bag size).
