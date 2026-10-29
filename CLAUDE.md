@@ -27,6 +27,11 @@
   Script outlines are WELDED (overlapping joins merged) so the plotter cuts each word as one piece.
   Placement: name ~283 mm wide, top ~139 mm below the hood. File: maestra-benedetta.svg.
 
+- Verona Dogs (LeLePrint client): front = "Verona Dogs" yellow, heart side; back = two dogs + ladder V logo,
+  unchanged. Back phrase "Educazione e sport cinofili": Righteous (OFL, closest legible match to the
+  Bauhaus-style "Verona Dogs"), logo yellow ~#F6EE13, one line centred under the V tip, width 0.80 x logo,
+  gap 0.07 x logo width (24 cm at a 30 cm logo; EasyWeed OK from ~21.5 cm wide, below that DTF).
+
 ## Mockups
 - Default placements follow `imgedit/mockup/placements.py`; always state assumptions (garment size, bag size).
 - Always keep pixels outside the logo identical to the product photo (verified by the engine).
